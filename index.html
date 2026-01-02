@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>超級瑪利歐：無限衝刺模式</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#5C94FC">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #5C94FC;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            border: 4px solid #000;
+            background-color: #5C94FC;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px #000;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="ui-overlay">
+    分數: <span id="score">0</span>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+/* ===== Service Worker 註冊 ===== */
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js');
+}
+
+/* ===== 遊戲程式 ===== */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreElement = document.getElementById('score');
+
+canvas.width = 800;
+canvas.height = 400;
+
+let score = 0;
+let gameActive = true;
+let gameSpeed = 5;
+
+const mario = {
+    x: 50,
+    y: 300,
+    width: 40,
+    height: 60,
+    color: '#E70000',
+    dy: 0,
+    jumpForce: 12,
+    gravity: 0.6,
+    grounded: false,
+    jump() {
+        if (this.grounded) {
+            this.dy = -this.jumpForce;
+            this.grounded = false;
+        }
+    }
+};
+
+const obstacles = [];
+
+function spawnObstacle() {
+    if (!gameActive) return;
+
+    const height = Math.random() * 60 + 40;
+    obstacles.push({
+        x: canvas.width,
+        y: canvas.height - height - 40,
+        width: 40,
+        height: height,
+        color: '#22B14C'
+    });
+
+    const timeout = Math.random() * 1000 + 1000;
+    setTimeout(spawnObstacle, timeout / (gameSpeed / 5));
+}
+
+window.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+        if (!gameActive) restartGame();
+        mario.jump();
+    }
+});
+
+canvas.addEventListener('touchstart', () => {
+    if (!gameActive) restartGame();
+    mario.jump();
+});
+
+function update() {
+    if (!gameActive) return;
+
+    mario.dy += mario.gravity;
+    mario.y += mario.dy;
+
+    if (mario.y + mario.height >= canvas.height - 40) {
+        mario.y = canvas.height - 40 - mario.height;
+        mario.dy = 0;
+        mario.grounded = true;
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const o = obstacles[i];
+        o.x -= gameSpeed;
+
+        if (
+            mario.x < o.x + o.width &&
+            mario.x + mario.width > o.x &&
+            mario.y < o.y + o.height &&
+            mario.y + mario.height > o.y
+        ) {
+            gameOver();
+        }
+
+        if (o.x + o.width < 0) {
+            obstacles.splice(i, 1);
+            score++;
+            scoreElement.textContent = score;
+            if (score % 5 === 0) gameSpeed += 0.2;
+        }
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#833100';
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+    ctx.fillStyle = '#22B14C';
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 10);
+
+    ctx.fillStyle = mario.color;
+    ctx.fillRect(mario.x, mario.y, mario.width, mario.height);
+
+    ctx.fillStyle = '#E70000';
+    ctx.fillRect(mario.x, mario.y, mario.width + 5, 15);
+
+    ctx.fillStyle = 'black';
+    ctx.fillRect(mario.x + 25, mario.y + 20, 5, 5);
+
+    obstacles.forEach(o => {
+        ctx.fillStyle = o.color;
+        ctx.fillRect(o.x, o.y, o.width, o.height);
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(o.x, o.y, o.width, o.height);
+    });
+
+    if (!gameActive) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = '40px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('遊戲結束', canvas.width / 2, canvas.height / 2);
+        ctx.font = '20px Arial';
+        ctx.fillText('按下 空白鍵 重新開始', canvas.width / 2, canvas.height / 2 + 40);
+    }
+}
+
+function gameOver() {
+    gameActive = false;
+}
+
+function restartGame() {
+    score = 0;
+    scoreElement.textContent = score;
+    obstacles.length = 0;
+    gameSpeed = 5;
+    mario.y = 300;
+    gameActive = true;
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+spawnObstacle();
+gameLoop();
+</script>
+
+</body>
+</html>
